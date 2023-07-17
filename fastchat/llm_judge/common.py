@@ -24,7 +24,16 @@ API_ERROR_OUTPUT = "$ERROR$"
 TIE_DELTA = 0.1
 
 # Categories that need reference answers
-NEED_REF_CATS = ["math", "reasoning", "coding"]
+
+# MT-bench:
+NEED_REF_CATS_MT_BENCH = ["math", "reasoning", "coding"] 
+# Z-bench: 
+# all data with reference answer; all categories: "基础能力", "进阶能力", "垂直领域"
+NEED_REF_CATS_Z_BENCH = ["基础能力", "进阶能力", "垂直领域"] 
+# Alignment Bench:
+# all categories: "评价看法", "基本任务", "写作类", "询求建议", "数学类", "逻辑推理", "学科知识问答", "中文理解进阶", "字词级别理解", "现实世界理解", "角色扮演"
+NEED_REF_CATS_ALIGNMENT_BENCH = ["基本任务", "数学类", "逻辑推理", "学科知识问答", "中文理解进阶", "字词级别理解", "现实世界理解"] 
+NEED_REF_CATS = NEED_REF_CATS_ALIGNMENT_BENCH
 
 # Extract scores from judgments
 two_score_pattern = re.compile("\[\[(\d+\.?\d*),\s?(\d+\.?\d*)\]\]")
@@ -159,6 +168,8 @@ def run_judge_single(question, answer, judge, ref_answer, multi_turn=False):
 
     if model in ["gpt-3.5-turbo", "gpt-4"]:
         judgment = chat_compeletion_openai(model, conv, temperature=0, max_tokens=2048)
+    elif model in ["gpt-4-stream"]:
+        judgment = chat_compeletion_openai_stream(model, conv, temperature=0, max_tokens=2048)
     elif model in ["claude-v1", "claude-instant-v1"]:
         judgment = chat_compeletion_anthropic(
             model, conv, temperature=0, max_tokens=1024
@@ -183,7 +194,7 @@ def run_judge_single(question, answer, judge, ref_answer, multi_turn=False):
     return rating, user_prompt, judgment
 
 
-def play_a_match_single(match: MatchPair, output_file: str):
+def play_a_match_single(match: MatchPair):
     question, model, answer, judge, ref_answer, multi_turn = (
         match.question,
         match.model,
@@ -217,11 +228,6 @@ def play_a_match_single(match: MatchPair, output_file: str):
         )
     else:
         raise ValueError(f"invalid judge type: {judge['type']}")
-
-    if output_file:
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        with open(output_file, "a") as fout:
-            fout.write(json.dumps(result) + "\n")
 
     return result
 
@@ -262,6 +268,9 @@ def run_judge_pair(question, answer_a, answer_b, judge, ref_answer, multi_turn=F
     if model in ["gpt-3.5-turbo", "gpt-4"]:
         conv.system = system_prompt
         judgment = chat_compeletion_openai(model, conv, temperature=0, max_tokens=2048)
+    elif model in ["gpt-4-stream"]:
+        conv.system = system_prompt
+        judgment = chat_compeletion_openai_stream(model, conv, temperature=0, max_tokens=2048)
     elif model in ["claude-v1", "claude-instant-v1"]:
         if system_prompt != "You are a helpful assistant.":
             user_prompt = "[Instruction]\n" + system_prompt + "\n\n" + user_prompt
@@ -303,7 +312,7 @@ def run_judge_pair(question, answer_a, answer_b, judge, ref_answer, multi_turn=F
     return winner, user_prompt, judgment
 
 
-def play_a_match_pair(match: MatchPair, output_file: str):
+def play_a_match_pair(match: MatchPair):
     question, model_1, model_2, answer_1, answer_2, judge, ref_answer, multi_turn = (
         match.question,
         match.model_1,
@@ -389,11 +398,6 @@ def play_a_match_pair(match: MatchPair, output_file: str):
     else:
         raise ValueError(f"invalid judge type: {judge['type']}")
 
-    if output_file:
-        os.makedirs(os.path.dirname(output_file), exist_ok=True)
-        with open(output_file, "a") as fout:
-            fout.write(json.dumps(result) + "\n")
-
     return result
 
 
@@ -410,6 +414,39 @@ def chat_compeletion_openai(model, conv, temperature, max_tokens):
                 max_tokens=max_tokens,
             )
             output = response["choices"][0]["message"]["content"]
+            break
+        except openai.error.OpenAIError as e:
+            print(type(e), e)
+            time.sleep(API_RETRY_SLEEP)
+
+    return output
+
+def chat_compeletion_openai_stream(model, conv, temperature, max_tokens):
+    output = API_ERROR_OUTPUT
+    for _ in range(API_MAX_RETRY):
+        try:
+            messages = conv.to_openai_api_messages()
+            response = openai.ChatCompletion.create(
+                model="gpt-4",
+                messages=messages,
+                temperature=temperature,
+                max_tokens=max_tokens,
+                stream=True  # again, we set stream=True
+            )
+            
+            collected_chunks = []
+            collected_messages = []
+            # iterate through the stream of events
+            for chunk in response:
+                collected_chunks.append(chunk)  # save the event response
+                chunk_message = chunk['choices'][0]['delta']  # extract the message
+                collected_messages.append(chunk_message)  # save the message
+                # print(f"Message received: {chunk_message}", flush=True)  # print the delay and text
+
+            # print the time delay and text received
+            output = ''.join([m.get('content', '') for m in collected_messages])
+            print(f"Full conversation received: {output}", flush=True)
+
             break
         except openai.error.OpenAIError as e:
             print(type(e), e)
@@ -630,7 +667,7 @@ def get_single_judge_explanation(gamekey, judgment_dict):
         return "N/A"
 
 
-def check_data(questions, model_answers, ref_answers, models, judges):
+def check_data(need_ref_cats, questions, model_answers, ref_answers, models, judges):
     # check model answers
     for m in models:
         assert m in model_answers, f"Missing model answer for {m}"
@@ -644,7 +681,7 @@ def check_data(questions, model_answers, ref_answers, models, judges):
         if not jg.ref_based:
             continue
         for q in questions:
-            if q["category"] not in NEED_REF_CATS:
+            if q["category"] not in need_ref_cats:
                 continue
             assert (
                 q["question_id"] in ref_answers[jg.model_name]

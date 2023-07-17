@@ -3,8 +3,13 @@ Usage:
 python gen_judgment.py --model-list [LIST-OF-MODEL-ID] --parallel [num-concurrent-api-call] --mode [single|pairwise-baseline|pairwise-all]
 """
 import argparse
-from concurrent.futures import ThreadPoolExecutor
+import os
+import openai
+import time
+from concurrent.futures import ThreadPoolExecutor, as_completed, wait, ProcessPoolExecutor
+from multiprocessing.pool import ThreadPool
 import json
+import multiprocessing
 
 import numpy as np
 from tqdm import tqdm
@@ -20,7 +25,9 @@ from fastchat.llm_judge.common import (
     Judge,
     MatchPair,
     MatchSingle,
-    NEED_REF_CATS,
+    NEED_REF_CATS_MT_BENCH,
+    NEED_REF_CATS_Z_BENCH,
+    NEED_REF_CATS_ALIGNMENT_BENCH
 )
 
 
@@ -207,11 +214,18 @@ if __name__ == "__main__":
     parser.add_argument(
         "--first-n", type=int, help="A debug option. Only run the first `n` judgments."
     )
+
     args = parser.parse_args()
 
     question_file = f"data/{args.bench_name}/question.jsonl"
     answer_dir = f"data/{args.bench_name}/model_answer"
     ref_answer_dir = f"data/{args.bench_name}/reference_answer"
+
+    # openai api
+    if "openai_base" in os.environ:
+        openai.api_base = os.environ["openai_base"]
+    if "openai_key" in os.environ:
+        openai.api_key = os.environ["openai_key"]
 
     # Load questions
     questions = load_questions(question_file, None, None)
@@ -252,10 +266,18 @@ if __name__ == "__main__":
             make_match_func = make_match
             baseline_model = args.baseline_model
 
-    check_data(questions, model_answers, ref_answers, models, judges)
+    if args.bench_name == "alignment_bench":
+        need_ref_cats = NEED_REF_CATS_ALIGNMENT_BENCH
+    elif args.bench_name == "z_bench":
+        need_ref_cats = NEED_REF_CATS_Z_BENCH
+    else:
+        need_ref_cats = NEED_REF_CATS_MT_BENCH
 
-    question_math = [q for q in questions if q["category"] in NEED_REF_CATS]
-    question_default = [q for q in questions if q["category"] not in NEED_REF_CATS]
+    check_data(need_ref_cats, questions, model_answers, ref_answers, models, judges)
+
+    question_math = [q for q in questions if q["category"] in need_ref_cats]
+    question_default = [q for q in questions if q["category"] not in need_ref_cats]
+    print("with reference questions: ", len(question_math), "; without reference questions: ", len(question_default))
 
     # Make matches
     matches = []
@@ -309,14 +331,45 @@ if __name__ == "__main__":
             play_a_match_func(match, output_file=output_file)
     else:
 
-        def play_a_match_wrapper(match):
-            play_a_match_func(match, output_file=output_file)
+        # def play_a_match_wrapper(match):
+        #     return play_a_match_func(match, output_file=output_file)
 
         np.random.seed(0)
         np.random.shuffle(matches)
 
-        with ThreadPoolExecutor(args.parallel) as executor:
-            for match in tqdm(
-                executor.map(play_a_match_wrapper, matches), total=len(matches)
-            ):
-                pass
+        # previous implementation encounters GPT-4 requests.exceptions.ConnectionError
+        # with ThreadPoolExecutor(args.parallel) as executor:
+        #     for match in tqdm(
+        #         executor.map(play_a_match_wrapper, matches), total=len(matches)
+        #     ):
+        #         pass
+
+        # with ProcessPoolExecutor(args.parallel) as executor:
+        #     results = []
+        #     for match in matches:
+        #         res = executor.submit(play_a_match_wrapper, match)
+        #         results.append(res)
+        #         time.sleep(1)
+            
+        #     for future in as_completed(results):
+        #         data = future.result()
+        #         print("complete: ", data)
+
+        pool = multiprocessing.Pool(args.parallel)
+        results = []
+        for match in matches:
+            result = pool.apply_async(play_a_match_func, args=(match,))
+            results.append(result)
+            time.sleep(1)
+        
+        while results:
+            with open(output_file, "a") as f:
+                for result in results:
+                    if result.ready():
+                        data = result.get()
+                        f.write(json.dumps(data,ensure_ascii=False) + "\n")
+                        results.remove(result)
+                time.sleep(5)
+
+        pool.close()
+        pool.join()

@@ -4,7 +4,7 @@ python3 show_result.py --mode [single|pairwise-baseline|pairwise-all]
 """
 import argparse
 import pandas as pd
-
+import os
 
 def display_result_single(args):
     if args.input_file is None:
@@ -24,6 +24,7 @@ def display_result_single(args):
     print("\n########## First turn ##########")
     df_1 = df[df["turn"] == 1].groupby(["model", "turn"]).mean()
     print(df_1.sort_values(by="score", ascending=False))
+    df_1.to_excel(args.save_file)
 
     if args.bench_name == "mt_bench":
         print("\n########## Second turn ##########")
@@ -87,11 +88,13 @@ def display_result_pairwise(args):
     # print(df.sort_values(by="win_rate", ascending=False))
     # print(df.sort_values(by="loss_rate", ascending=True))
     print(df.sort_values(by="win_rate_adjusted", ascending=False))
+    df.to_excel(args.save_file)
 
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     parser.add_argument("--bench-name", type=str, default="mt_bench")
+    parser.add_argument("--save-file", type=str)
     parser.add_argument("--input-file", type=str)
     parser.add_argument("--judge-model", type=str, default="gpt-4")
     parser.add_argument("--baseline-model", type=str, default="gpt-3.5-turbo")
@@ -122,6 +125,9 @@ if __name__ == "__main__":
         if args.mode == "pairwise-all":
             args.baseline_model = None
         display_result_func = display_result_pairwise
+
+    save_dir = os.path.dirname(args.save_file)
+    os.makedirs(save_dir, exist_ok=True)
 
     print(f"Mode: {args.mode}")
     display_result_func(args)
