@@ -337,6 +337,9 @@ if __name__ == "__main__":
         np.random.seed(0)
         np.random.shuffle(matches)
 
+        dir_ = os.path.dirname(output_file)
+        os.makedirs(dir_, exist_ok=True)
+
         # previous implementation encounters GPT-4 requests.exceptions.ConnectionError
         # with ThreadPoolExecutor(args.parallel) as executor:
         #     for match in tqdm(

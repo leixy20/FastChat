@@ -68,7 +68,7 @@ class api_model:
 
 class ChatGLM2(api_model):
     def __init__(self, workers = 10):
-        self.url = "http://36.103.203.43:9989/api/call" 
+        self.url = "" # TODO
         self.temperature = 0.95
         self.max_tokens = 10
         self.workers = workers
@@ -81,7 +81,7 @@ class ChatGLM2(api_model):
             "history": [],
         })
         headers = {
-            'Authorization': 'TEMPORARY_AUTHORIZATION_QWDOIAOAHOI2471',
+            'Authorization': '', # TODO
             'Content-Type': 'application/json; charset=utf-8'
         }
         response = requests.request("POST", url, headers=headers, data=payload, stream=True)
@@ -95,7 +95,7 @@ class ChatGLM2(api_model):
 
 class ChatGPT(api_model):
     def __init__(self, workers=10):
-        self.url = "http://40.74.217.35:10013/api/openai/chat-completion"
+        self.url = "" # TODO
         self.model = "gpt-3.5-turbo"
         self.workers = workers
 
@@ -113,7 +113,7 @@ class ChatGPT(api_model):
         })
         headers = {
             'Content-Type': 'application/json',
-            'Authorization': 'e187831a12f151d607d9f43417c5ae2f',
+            'Authorization': '', # TODO
         }
 
         response = requests.request("POST", url, headers=headers, data=payload)
@@ -122,14 +122,14 @@ class ChatGPT(api_model):
 
 class ChatGLM2_6B(api_model):
     def __init__(self, workers=10):
-        self.url = "http://166.111.5.162:39999/api/v1/chatglm_6b_v2/call"
+        self.url = "" # TODO
         self.workers = workers
         self.timeout = 120
 
     def get_api_result(self, prompt):
         history = [{"role":"user", "content":prompt}]
         headers = {
-            'Authorization': 'key-Z1rbNzO7YtPVHFhI',
+            'Authorization': '', # TODO
             'Content-Type': 'application/json'
         }
         resp = requests.post(self.url, json={
@@ -144,14 +144,14 @@ class ChatGLM2_6B(api_model):
 
 class ChatGLM_6B_v1(api_model):
     def __init__(self, workers=10):
-        self.url = "http://166.111.5.162:39999/api/v1/chatglm_6b_v1.1/call"
+        self.url = "" # TODO
         self.workers = workers
         self.timeout = 120
 
     def get_api_result(self, prompt):
         history = [{"role":"user", "content":prompt}]
         headers = {
-            'Authorization': 'key-Z1rbNzO7YtPVHFhI',
+            'Authorization': '', # TODO
             'Content-Type': 'application/json'
         }
         resp = requests.post(self.url, json={

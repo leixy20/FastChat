@@ -33,7 +33,7 @@ NEED_REF_CATS_Z_BENCH = ["基础能力", "进阶能力", "垂直领域"]
 # Alignment Bench:
 # all categories: "评价看法", "基本任务", "写作类", "询求建议", "数学类", "逻辑推理", "学科知识问答", "中文理解进阶", "字词级别理解", "现实世界理解", "角色扮演"
 NEED_REF_CATS_ALIGNMENT_BENCH = ["基本任务", "数学类", "逻辑推理", "学科知识问答", "中文理解进阶", "字词级别理解", "现实世界理解"] 
-NEED_REF_CATS = NEED_REF_CATS_ALIGNMENT_BENCH
+NEED_REF_CATS = NEED_REF_CATS_Z_BENCH
 
 # Extract scores from judgments
 two_score_pattern = re.compile("\[\[(\d+\.?\d*),\s?(\d+\.?\d*)\]\]")
